@@ -2,7 +2,8 @@ import { env } from '$env/dynamic/private';
 import { LIMITS, MODELS } from '$lib/config';
 import { RateLimitedError, createClient, errorStatus, streamChat } from '$lib/server/gemini';
 import { createLimiter } from '$lib/server/rateLimit';
-import { TUTOR_SYSTEM_PROMPT } from '$lib/server/tutorPrompt';
+import { buildTutorPrompt } from '$lib/server/tutorPrompt';
+import type { HintLevel } from '$lib/hintLadder';
 import type { ChatMessage, StreamEvent } from '$lib/types';
 import type { RequestHandler } from './$types';
 
@@ -19,6 +20,11 @@ function parseMessages(body: unknown): ChatMessage[] | null {
 	return messages.map((m) => ({ role: m.role, content: m.content }));
 }
 
+function parseHintLevel(body: unknown): HintLevel {
+	const l = (body as { hintLevel?: unknown })?.hintLevel;
+	return l === 2 || l === 3 || l === 4 ? l : 1;
+}
+
 const json = (status: number, event: StreamEvent, headers: HeadersInit = {}) =>
 	new Response(JSON.stringify(event), { status, headers: { 'content-type': 'application/json', ...headers } });
 
@@ -33,8 +39,11 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
 	}
 
 	let messages: ChatMessage[] | null = null;
+	let hintLevel: HintLevel = 1;
 	try {
-		messages = parseMessages(await request.json());
+		const body = await request.json();
+		messages = parseMessages(body);
+		hintLevel = parseHintLevel(body);
 	} catch {
 		/* fall through to 400 */
 	}
@@ -54,7 +63,7 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
 	const stream = new ReadableStream({
 		async start(controller) {
 			try {
-				for await (const text of streamChat(ai, MODELS.tutor, TUTOR_SYSTEM_PROMPT, messages)) {
+				for await (const text of streamChat(ai, MODELS.tutor, buildTutorPrompt(hintLevel), messages)) {
 					send(controller, { type: 'token', text });
 				}
 				send(controller, { type: 'done' });

@@ -7,6 +7,7 @@ export interface ChatMessage {
 
 export interface ChatRequest {
 	messages: ChatMessage[];
+	hintLevel: 1 | 2 | 3 | 4;
 }
 
 /** SSE events emitted by /api/chat. */

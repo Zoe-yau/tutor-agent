@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import type { Session } from '$lib/state/session.svelte';
+	import HintLadder from './HintLadder.svelte';
 	import MessageBubble from './MessageBubble.svelte';
 
 	let { session }: { session: Session } = $props();
@@ -50,6 +51,12 @@
 			{session.error}{#if waitSeconds > 0} Try again in {waitSeconds}s.{/if}
 		</p>
 	{/if}
+
+	<HintLadder
+		level={session.hint.level}
+		disabled={blocked || session.messages.length === 0}
+		onhint={() => session.requestHint()}
+	/>
 
 	<form onsubmit={submit}>
 		<label class="sr-only" for="draft">Your message</label>

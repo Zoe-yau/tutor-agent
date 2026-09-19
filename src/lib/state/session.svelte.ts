@@ -1,3 +1,4 @@
+import { detectStuck, initialHintState, reduceHint, type HintState } from '$lib/hintLadder';
 import type { ChatMessage, StreamEvent } from '$lib/types';
 
 export type SessionStatus = 'idle' | 'streaming' | 'error';
@@ -24,12 +25,29 @@ export class Session {
 	status = $state<SessionStatus>('idle');
 	error = $state<string | null>(null);
 	retryAt = $state<number | null>(null);
+	hint = $state<HintState>(initialHintState());
 
 	private abort: AbortController | null = null;
 
-	async send(text: string): Promise<void> {
+	/** Sets the concept being discussed; the hint level resets when it changes. */
+	setConcept(concept: string): void {
+		this.hint = reduceHint(this.hint, { type: 'concept_changed', concept });
+	}
+
+	/** Explicit "Show me a hint" button. */
+	requestHint(): Promise<void> {
+		return this.send('Can I have a hint?', true);
+	}
+
+	async send(text: string, hintRequested = false): Promise<void> {
 		const content = text.trim();
 		if (!content || this.status === 'streaming') return;
+
+		// Only raise the level if there is already a tutor turn to escalate from.
+		if (this.messages.length > 0) {
+			if (hintRequested) this.hint = reduceHint(this.hint, { type: 'request_hint' });
+			else if (detectStuck(content)) this.hint = reduceHint(this.hint, { type: 'stuck' });
+		}
 
 		this.error = null;
 		this.retryAt = null;
@@ -44,7 +62,7 @@ export class Session {
 			const res = await fetch('/api/chat', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ messages: history }),
+				body: JSON.stringify({ messages: history, hintLevel: this.hint.level }),
 				signal: this.abort.signal
 			});
 
