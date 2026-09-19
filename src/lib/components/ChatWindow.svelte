@@ -4,7 +4,7 @@
 	import HintLadder from './HintLadder.svelte';
 	import MessageBubble from './MessageBubble.svelte';
 
-	let { session }: { session: Session } = $props();
+	let { session, intro = 'Ask a question to get started.' }: { session: Session; intro?: string } = $props();
 
 	let draft = $state('');
 	let log: HTMLElement;
@@ -36,7 +36,7 @@
 <section class="chat" aria-label="Chat with your tutor">
 	<div class="log" bind:this={log} role="log" aria-live="polite">
 		{#if session.messages.length === 0}
-			<p class="empty">Ask a question to get started.</p>
+			<p class="empty">{intro}</p>
 		{/if}
 		{#each session.messages as message, i (i)}
 			<MessageBubble {message} pending={session.status === 'streaming' && i === session.messages.length - 1} />

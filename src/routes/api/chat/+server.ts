@@ -2,7 +2,7 @@ import { env } from '$env/dynamic/private';
 import { LIMITS, MODELS } from '$lib/config';
 import { RateLimitedError, createClient, errorStatus, streamChat } from '$lib/server/gemini';
 import { createLimiter } from '$lib/server/rateLimit';
-import { buildTutorPrompt } from '$lib/server/tutorPrompt';
+import { buildTutorPrompt, type TutorContext } from '$lib/server/tutorPrompt';
 import type { HintLevel } from '$lib/hintLadder';
 import type { ChatMessage, StreamEvent } from '$lib/types';
 import type { RequestHandler } from './$types';
@@ -18,6 +18,17 @@ function parseMessages(body: unknown): ChatMessage[] | null {
 	}
 	if (messages[messages.length - 1].role !== 'user') return null;
 	return messages.map((m) => ({ role: m.role, content: m.content }));
+}
+
+function parseContext(body: unknown): TutorContext | null {
+	const b = body as { topic?: unknown; material?: unknown } | null;
+	const ctx: TutorContext = {};
+	if (typeof b?.topic === 'string') ctx.topic = b.topic.slice(0, 100);
+	if (b?.material !== undefined) {
+		if (typeof b.material !== 'string' || b.material.length > LIMITS.maxMaterialChars) return null;
+		if (b.material.trim()) ctx.material = b.material;
+	}
+	return ctx;
 }
 
 function parseHintLevel(body: unknown): HintLevel {
@@ -40,14 +51,16 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
 
 	let messages: ChatMessage[] | null = null;
 	let hintLevel: HintLevel = 1;
+	let context: TutorContext | null = null;
 	try {
 		const body = await request.json();
 		messages = parseMessages(body);
 		hintLevel = parseHintLevel(body);
+		context = parseContext(body);
 	} catch {
 		/* fall through to 400 */
 	}
-	if (!messages) return json(400, { type: 'error', code: 'bad_request', message: 'Invalid chat request.' });
+	if (!messages || !context) return json(400, { type: 'error', code: 'bad_request', message: 'Invalid chat request.' });
 
 	let ai;
 	try {
@@ -63,7 +76,7 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
 	const stream = new ReadableStream({
 		async start(controller) {
 			try {
-				for await (const text of streamChat(ai, MODELS.tutor, buildTutorPrompt(hintLevel), messages)) {
+				for await (const text of streamChat(ai, MODELS.tutor, buildTutorPrompt(hintLevel, context), messages)) {
 					send(controller, { type: 'token', text });
 				}
 				send(controller, { type: 'done' });

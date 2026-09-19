@@ -11,5 +11,7 @@ export const LIMITS = {
 	requestsPerWindow: 10,
 	windowMs: 60_000,
 	maxMessages: 40,
-	maxMessageChars: 4_000
+	maxMessageChars: 4_000,
+	/** Cap on pasted study material, enforced in the UI and again on the server. */
+	maxMaterialChars: 8_000
 } as const;

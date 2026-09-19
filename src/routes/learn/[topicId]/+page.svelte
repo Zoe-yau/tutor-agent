@@ -1,25 +1,59 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import { goto, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import ChatWindow from '$lib/components/ChatWindow.svelte';
 	import MasteryPanel from '$lib/components/MasteryPanel.svelte';
 	import { progress } from '$lib/state/progress.svelte';
 	import { Session } from '$lib/state/session.svelte';
+	import { storage } from '$lib/storage';
+	import { CUSTOM_TOPIC_ID, getTopic } from '$lib/topics';
 
-	const topicId = page.params.topicId;
-	const session = new Session({
-		topic: topicId === 'general' ? undefined : topicId,
-		knownConcepts: () => Object.keys(progress.mastery),
-		onAnalysis: (a) => progress.apply(a)
-	});
+	const topicId = page.params.topicId ?? '';
+	const sessionParam = page.url.searchParams.get('session');
 
+	let session = $state<Session | null>(null);
 	let drawerOpen = $state(false);
+
+	const intro = (s: Session) =>
+		topicId === CUSTOM_TOPIC_ID
+			? `Let's work through your material. Tell me what you already understand, or ask about any part of it.`
+			: `Let's explore ${s.snapshot().topicTitle}. Tell me what you already know, or ask a question.`;
+
+	onMount(async () => {
+		await progress.init();
+		const builtin = getTopic(topicId);
+		let saved = sessionParam ? await storage.getSession(sessionParam) : null;
+		if (saved && saved.topicId !== topicId) saved = null;
+
+		// Custom sessions need their saved material; unknown topics have nothing to teach.
+		if ((topicId === CUSTOM_TOPIC_ID && !saved) || (!builtin && topicId !== CUSTOM_TOPIC_ID)) {
+			await goto('/', { replaceState: true });
+			return;
+		}
+
+		const id = saved?.id ?? sessionParam ?? crypto.randomUUID();
+		const s = new Session({
+			id,
+			topicId,
+			topicTitle: saved?.topicTitle ?? builtin?.title ?? 'Study session',
+			material: saved?.material,
+			knownConcepts: () => Object.keys(progress.mastery),
+			onAnalysis: (a) => progress.apply(a),
+			onPersist: (x) => void storage.saveSession(x)
+		});
+		if (saved) s.restore(saved);
+		if (!sessionParam) replaceState(`?session=${id}`, {});
+		session = s;
+	});
 </script>
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && (drawerOpen = false)} />
 
+{#if session}
 <div class="layout">
 	<div class="chat">
-		<ChatWindow {session} />
+		<ChatWindow {session} intro={intro(session)} />
 	</div>
 	<aside class:open={drawerOpen} aria-label="Mastery and misconceptions">
 		<MasteryPanel {progress} />
@@ -33,12 +67,19 @@
 		{drawerOpen ? 'Hide progress' : 'Show progress'}
 	</button>
 </div>
+{:else}
+	<p class="loading">Loading…</p>
+{/if}
 
 <style>
 	.layout {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) 300px;
 		height: 100%;
+	}
+	.loading {
+		padding: 2rem 1rem;
+		color: var(--muted);
 	}
 	.chat {
 		min-height: 0;

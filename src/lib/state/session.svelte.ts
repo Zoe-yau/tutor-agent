@@ -1,4 +1,5 @@
 import { detectStuck, initialHintState, reduceHint, type HintState } from '$lib/hintLadder';
+import type { StoredSession } from '$lib/storage';
 import type { Analysis, AnalyzeResponse, ChatMessage, StreamEvent } from '$lib/types';
 
 export type SessionStatus = 'idle' | 'streaming' | 'error';
@@ -21,9 +22,13 @@ export function parseSse(buffer: string): { events: StreamEvent[]; rest: string 
 }
 
 export interface SessionOptions {
-	topic?: string;
+	id: string;
+	topicId: string;
+	topicTitle: string;
+	material?: string;
 	knownConcepts?: () => string[];
 	onAnalysis?: (analysis: Analysis) => void;
+	onPersist?: (session: StoredSession) => void;
 }
 
 export class Session {
@@ -32,10 +37,34 @@ export class Session {
 	error = $state<string | null>(null);
 	retryAt = $state<number | null>(null);
 	hint = $state<HintState>(initialHintState());
+	concepts = $state<string[]>([]);
 
 	private abort: AbortController | null = null;
+	private startedAt = Date.now();
 
-	constructor(private opts: SessionOptions = {}) {}
+	constructor(private opts: SessionOptions) {}
+
+	/** Rehydrates a previously saved session. */
+	restore(saved: StoredSession): void {
+		this.messages = saved.messages;
+		this.hint = saved.hint;
+		this.concepts = saved.concepts;
+		this.startedAt = saved.startedAt;
+	}
+
+	snapshot(): StoredSession {
+		return {
+			id: this.opts.id,
+			topicId: this.opts.topicId,
+			topicTitle: this.opts.topicTitle,
+			material: this.opts.material,
+			messages: $state.snapshot(this.messages) as ChatMessage[],
+			hint: $state.snapshot(this.hint) as HintState,
+			concepts: [...this.concepts],
+			startedAt: this.startedAt,
+			updatedAt: Date.now()
+		};
+	}
 
 	/** Sets the concept being discussed; the hint level resets when it changes. */
 	setConcept(concept: string): void {
@@ -66,18 +95,30 @@ export class Session {
 		this.status = 'streaming';
 		this.abort = new AbortController();
 
+		const ok = await this.exchange(history, reply);
+		this.persist();
+		if (ok) void this.analyze(history);
+	}
+
+	/** Streams the tutor reply into messages[reply]. Returns true on a clean finish. */
+	private async exchange(history: ChatMessage[], reply: number): Promise<boolean> {
 		try {
 			const res = await fetch('/api/chat', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ messages: history, hintLevel: this.hint.level }),
-				signal: this.abort.signal
+				body: JSON.stringify({
+					messages: history,
+					hintLevel: this.hint.level,
+					topic: this.opts.topicTitle,
+					material: this.opts.material
+				}),
+				signal: this.abort?.signal
 			});
 
 			if (!res.ok || !res.body) {
 				const e = (await res.json().catch(() => null)) as StreamEvent | null;
 				this.fail(reply, e?.type === 'error' ? e : null);
-				return;
+				return false;
 			}
 
 			const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
@@ -93,18 +134,20 @@ export class Session {
 					if (ev.type === 'token') this.messages[reply].content += ev.text;
 					else if (ev.type === 'error') {
 						this.fail(reply, ev);
-						return;
+						return false;
 					} else finished = true;
 				}
 			}
-			if (!finished) this.fail(reply, null);
-			else {
-				this.status = 'idle';
-				void this.analyze(history);
+			if (!finished) {
+				this.fail(reply, null);
+				return false;
 			}
+			this.status = 'idle';
+			return true;
 		} catch (err) {
 			if ((err as Error).name === 'AbortError') this.status = 'idle';
 			else this.fail(reply, null);
+			return false;
 		}
 	}
 
@@ -114,15 +157,25 @@ export class Session {
 			const res = await fetch('/api/analyze', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ messages: history, knownConcepts: this.opts.knownConcepts?.() ?? [], topic: this.opts.topic })
+				body: JSON.stringify({
+					messages: history,
+					knownConcepts: this.opts.knownConcepts?.() ?? [],
+					topic: this.opts.topicTitle
+				})
 			});
 			const data = (await res.json()) as AnalyzeResponse;
 			if (!data.ok) return;
 			this.setConcept(data.analysis.concepts[0]);
+			this.concepts = [...new Set([...this.concepts, ...data.analysis.concepts])];
 			this.opts.onAnalysis?.(data.analysis);
+			this.persist();
 		} catch {
 			/* ignore */
 		}
+	}
+
+	private persist(): void {
+		if (this.messages.length > 0) this.opts.onPersist?.(this.snapshot());
 	}
 
 	stop(): void {
