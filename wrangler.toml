@@ -1,0 +1,6 @@
+name = "tutor"
+compatibility_date = "2025-01-01"
+pages_build_output_dir = ".svelte-kit/cloudflare"
+
+# GEMINI_API_KEY is a secret: set it with `wrangler pages secret put GEMINI_API_KEY`
+# (and in .dev.vars for local dev). Never commit it here.
