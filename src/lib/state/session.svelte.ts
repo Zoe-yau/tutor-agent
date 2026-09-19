@@ -38,6 +38,8 @@ export class Session {
 	retryAt = $state<number | null>(null);
 	hint = $state<HintState>(initialHintState());
 	concepts = $state<string[]>([]);
+	/** Shown beside the mastery panel when analysis could not run. */
+	analysisNote = $state<string | null>(null);
 
 	private abort: AbortController | null = null;
 	private startedAt = Date.now();
@@ -164,7 +166,12 @@ export class Session {
 				})
 			});
 			const data = (await res.json()) as AnalyzeResponse;
-			if (!data.ok) return;
+			if (!data.ok) {
+				this.analysisNote =
+					data.reason === 'rate_limited' ? 'Mastery tracking paused briefly (rate limit). Chat is unaffected.' : null;
+				return;
+			}
+			this.analysisNote = null;
 			this.setConcept(data.analysis.concepts[0]);
 			this.concepts = [...new Set([...this.concepts, ...data.analysis.concepts])];
 			this.opts.onAnalysis?.(data.analysis);

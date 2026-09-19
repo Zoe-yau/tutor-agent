@@ -2,10 +2,11 @@
 	import { masteryLabel } from '$lib/mastery';
 	import type { Progress } from '$lib/state/progress.svelte';
 
-	let { progress }: { progress: Progress } = $props();
+	let { progress, note = null }: { progress: Progress; note?: string | null } = $props();
 </script>
 
 <div class="panel">
+	{#if note}<p class="note" role="status">{note}</p>{/if}
 	<h2>Mastery</h2>
 	{#if progress.ranked.length === 0}
 		<p class="empty">Concepts will appear here as you chat.</p>
@@ -93,6 +94,13 @@
 		border-radius: 8px;
 		background: #fff4e0;
 		color: #5c3a00;
+	}
+	.note {
+		margin: 0 0 0.75rem;
+		padding: 0.4rem 0.6rem;
+		border-radius: 8px;
+		background: #eef1ff;
+		font-size: 0.8rem;
 	}
 	.empty {
 		color: var(--muted);

@@ -10,6 +10,9 @@
 	</nav>
 </header>
 <main>{@render children()}</main>
+<footer>
+	Free-tier Gemini: what you type may be used by Google to improve its models. Don't enter personal or sensitive information.
+</footer>
 
 <style>
 	:global(:root) {
@@ -28,6 +31,23 @@
 		height: 100dvh;
 		display: flex;
 		flex-direction: column;
+	}
+	:global(:focus-visible) {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		:global(*) {
+			animation: none !important;
+			transition: none !important;
+		}
+	}
+	footer {
+		padding: 0.4rem 1rem;
+		font-size: 0.75rem;
+		text-align: center;
+		color: var(--muted);
+		border-top: 1px solid var(--border);
 	}
 	header {
 		display: flex;

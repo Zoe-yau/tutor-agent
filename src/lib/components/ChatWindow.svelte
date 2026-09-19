@@ -34,7 +34,7 @@
 </script>
 
 <section class="chat" aria-label="Chat with your tutor">
-	<div class="log" bind:this={log} role="log" aria-live="polite">
+	<div class="log" bind:this={log} role="log" aria-live="polite" aria-busy={session.status === 'streaming'}>
 		{#if session.messages.length === 0}
 			<p class="empty">{intro}</p>
 		{/if}

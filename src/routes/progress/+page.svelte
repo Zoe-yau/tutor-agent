@@ -29,6 +29,8 @@
 	}
 </script>
 
+<svelte:head><title>Progress · Tutor</title></svelte:head>
+
 <div class="wrap">
 	<h1>Progress</h1>
 

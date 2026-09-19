@@ -30,6 +30,8 @@
 	}
 </script>
 
+<svelte:head><title>Topics · Tutor</title></svelte:head>
+
 <div class="home">
 	<h1>What would you like to learn?</h1>
 	<p class="lead">Pick a topic and your tutor will guide you with questions and hints.</p>
@@ -41,6 +43,7 @@
 	</div>
 
 	<h2>Or paste your own material</h2>
+	<p class="lead">Text you paste is sent to Google Gemini. Avoid personal or confidential content.</p>
 	<form onsubmit={startCustom}>
 		<label>
 			Title (optional)

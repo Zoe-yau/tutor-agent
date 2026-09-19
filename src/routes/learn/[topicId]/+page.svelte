@@ -48,6 +48,8 @@
 	});
 </script>
 
+<svelte:head><title>Session · Tutor</title></svelte:head>
+
 <svelte:window onkeydown={(e) => e.key === 'Escape' && (drawerOpen = false)} />
 
 {#if session}
@@ -56,7 +58,7 @@
 		<ChatWindow {session} intro={intro(session)} />
 	</div>
 	<aside class:open={drawerOpen} aria-label="Mastery and misconceptions">
-		<MasteryPanel {progress} />
+		<MasteryPanel {progress} note={session.analysisNote} />
 	</aside>
 	<button
 		class="toggle"
