@@ -1,5 +1,5 @@
 import { detectStuck, initialHintState, reduceHint, type HintState } from '$lib/hintLadder';
-import type { ChatMessage, StreamEvent } from '$lib/types';
+import type { Analysis, AnalyzeResponse, ChatMessage, StreamEvent } from '$lib/types';
 
 export type SessionStatus = 'idle' | 'streaming' | 'error';
 
@@ -20,6 +20,12 @@ export function parseSse(buffer: string): { events: StreamEvent[]; rest: string 
 	return { events, rest };
 }
 
+export interface SessionOptions {
+	topic?: string;
+	knownConcepts?: () => string[];
+	onAnalysis?: (analysis: Analysis) => void;
+}
+
 export class Session {
 	messages = $state<ChatMessage[]>([]);
 	status = $state<SessionStatus>('idle');
@@ -28,6 +34,8 @@ export class Session {
 	hint = $state<HintState>(initialHintState());
 
 	private abort: AbortController | null = null;
+
+	constructor(private opts: SessionOptions = {}) {}
 
 	/** Sets the concept being discussed; the hint level resets when it changes. */
 	setConcept(concept: string): void {
@@ -90,10 +98,30 @@ export class Session {
 				}
 			}
 			if (!finished) this.fail(reply, null);
-			else this.status = 'idle';
+			else {
+				this.status = 'idle';
+				void this.analyze(history);
+			}
 		} catch (err) {
 			if ((err as Error).name === 'AbortError') this.status = 'idle';
 			else this.fail(reply, null);
+		}
+	}
+
+	/** Best-effort analysis of the student's latest turn; failures are silent so chat is never blocked. */
+	private async analyze(history: ChatMessage[]): Promise<void> {
+		try {
+			const res = await fetch('/api/analyze', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ messages: history, knownConcepts: this.opts.knownConcepts?.() ?? [], topic: this.opts.topic })
+			});
+			const data = (await res.json()) as AnalyzeResponse;
+			if (!data.ok) return;
+			this.setConcept(data.analysis.concepts[0]);
+			this.opts.onAnalysis?.(data.analysis);
+		} catch {
+			/* ignore */
 		}
 	}
 

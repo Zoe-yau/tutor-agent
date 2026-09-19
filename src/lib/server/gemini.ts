@@ -1,4 +1,4 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, type Schema } from '@google/genai';
 import type { ChatMessage } from '$lib/types';
 
 export class RateLimitedError extends Error {
@@ -85,4 +85,22 @@ export async function* streamChat(
 	for await (const chunk of stream) {
 		if (chunk.text) yield chunk.text;
 	}
+}
+
+/** One-shot structured-output call; returns the raw JSON text (validate before use). */
+export async function generateJson(
+	ai: GoogleGenAI,
+	model: string,
+	systemInstruction: string,
+	prompt: string,
+	responseSchema: Schema
+): Promise<string> {
+	const res = await withRetry(() =>
+		ai.models.generateContent({
+			model,
+			contents: prompt,
+			config: { systemInstruction, responseMimeType: 'application/json', responseSchema, temperature: 0 }
+		})
+	);
+	return res.text ?? '';
 }
