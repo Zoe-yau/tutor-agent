@@ -1,0 +1,10 @@
+{
+  "description": "Engage with a 1:1 Socratic AI tutor that enhances learning through guiding questions, hint levels, and mastery tracking for personalized education.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
